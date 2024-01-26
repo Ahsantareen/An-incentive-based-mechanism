@@ -1,0 +1,6 @@
+ for (int i = 0; i < totaltime; i++) {
+            for (int p = 0; p < numev; p++) {
+                std::cout << cplex.getValue(evtomg[p][i]) << "\t";
+            }
+            std::cout << std::endl;
+        }

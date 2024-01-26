@@ -1,0 +1,50 @@
+#include <iostream>
+#include <vector>
+#include <algorithm>
+#include <cmath>
+
+double sigmoid(double x) {
+    return 1.0 / (1.0 + std::exp(-x));
+}
+
+int main() {
+    std::vector<double> demand = {4843, 4620, 4537, 4588, 4767, 5118, 5577, 5985, 6349, 6757, 6942, 7134, 7261, 7261, 7555, 7784, 7740, 7478, 7185, 6961, 6521, 5966, 5462, 5169};
+    std::vector<double> gridBuy = {139, 136, 137, 136, 134, 138, 146, 151, 156, 159, 161, 163, 164, 163, 162, 161, 161, 160, 159, 161, 158, 156, 151, 149};
+    std::vector<double> gridSell = {119, 116, 118, 117, 115, 118, 126, 131, 137, 139, 141, 143, 144, 143, 142, 141, 141, 140, 139, 141, 138, 136, 131, 129};
+    
+    double max_demand = *std::max_element(demand.begin(), demand.end());
+    std::vector<double> normalized_demand(demand.size());
+    
+    for (size_t i = 0; i < demand.size(); i++) {
+        normalized_demand[i] = demand[i] / max_demand;
+    }
+    
+    // Use sigmoid function for non-linear weights
+    std::vector<double> weight_sell(demand.size());
+    std::vector<double> weight_buy(demand.size());
+    
+    for (size_t i = 0; i < normalized_demand.size(); i++) {
+        weight_sell[i] = sigmoid(normalized_demand[i]);
+        weight_buy[i] = 1 - weight_sell[i];
+    }
+    
+    std::vector<double> incentivized_selling_price(demand.size());
+    
+    for (size_t i = 0; i < demand.size(); i++) {
+        incentivized_selling_price[i] = weight_sell[i] * gridSell[i] + weight_buy[i] * gridBuy[i];
+    }
+    
+    double profit_margin = 0.05;  // Example: 5% profit margin
+    std::vector<double> final_selling_price(demand.size());
+    
+    for (size_t i = 0; i < demand.size(); i++) {
+        final_selling_price[i] = incentivized_selling_price[i] * (1 + profit_margin);
+    }
+    
+    // Print final selling prices
+    for (size_t i = 0; i < final_selling_price.size(); i++) {
+        std::cout << "Hour " << i + 1 << ": " << final_selling_price[i] << std::endl;
+    }
+    
+    return 0;
+}

@@ -1,0 +1,53 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.stats import lognorm
+
+# Set the seed for reproducible results
+np.random.seed(25)
+
+# Parameters
+num_vehicles = 20
+num_simulations = 10000
+mean_daily_distance = 34.1
+std_dev_daily_distance = 14.4
+
+# Convert the mean and standard deviation to log scale
+mu, sigma = np.log(mean_daily_distance**2 / np.sqrt(mean_daily_distance**2 + std_dev_daily_distance**2)), np.sqrt(np.log(1 + std_dev_daily_distance**2 / mean_daily_distance**2))
+
+# Function to simulate daily driving distances
+def simulate_daily_driving_distances(mu, sigma, num_vehicles, num_simulations):
+    daily_distances = []
+
+    for _ in range(num_simulations):
+        distances = np.random.lognormal(mu, sigma, num_vehicles)
+        daily_distances.append(distances)
+
+    return np.array(daily_distances)
+
+# Run the simulation
+simulated_daily_distances = simulate_daily_driving_distances(mu, sigma, num_vehicles, num_simulations)
+
+# Plot the histogram of the generated data for daily driving distances
+fig, axs = plt.subplots(nrows=1, ncols=1, figsize=(8, 6))
+bins = np.linspace(0, 150, 30)
+axs.hist(simulated_daily_distances.flatten(), bins=bins, density=True, alpha=0.7, label="Daily Driving Distances")
+x = np.linspace(0, 150, 1000)
+pdf_daily_distance = lognorm.pdf(x, sigma, scale=np.exp(mu))
+axs.plot(x, pdf_daily_distance, '-', color='r', label="Initial PDF - Daily Distance")
+axs.set_xlabel("Distance (Km)")
+axs.set_ylabel("Probability Density")
+axs.set_title("Histogram of Daily Driving Distances")
+axs.legend()
+plt.show()
+
+# Select a random sample from the simulation results
+random_sample_idx = np.random.randint(0, num_simulations)
+
+# Print the results
+for vehicle_idx in range(num_vehicles):
+    print(f"Vehicle {vehicle_idx + 1}:")
+    print(f"  Daily driving distance: {simulated_daily_distances[random_sample_idx, vehicle_idx]:.0f} Km\n")
+
+# Print the mean and standard deviation for the data set
+print(f"Mean daily driving distance: {mean_daily_distance:.2f} Km")
+print(f"Standard deviation of daily driving distance: {std_dev_daily_distance:.2f} Km")

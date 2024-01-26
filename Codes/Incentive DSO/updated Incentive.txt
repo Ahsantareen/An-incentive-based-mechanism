@@ -1,0 +1,81 @@
+#include <ilcplex/ilocplex.h>
+ILOSTLBEGIN
+
+
+int
+main(int, char**)
+{
+	IloEnv env;
+
+	try {
+
+		int totaltime = 24;//One day
+		float electricdemand[24] = {4843, 4620, 4537, 4588, 4767, 5118, 5577, 5985, 6349, 6757, 6942, 7134, 7261, 7261, 7555, 7784, 7740, 7478, 7185, 6961, 6521, 5966, 5462, 5169 };//Electicity demand w.r.t time
+		float gridbuy[24] = { 139,136,137,136,134,138,146,151,156,159,161,163,164,163,162,161,161,160,159,161,158,156,151,149};//buying price from grid w.r.t time
+		float gridsell[24] = {119,116,118,117,115,118,126,131,137,139,141,143,144,143,142,141,141,140,139,141,138,136,131,129};//selling price to grid w.r.t time
+		
+		
+		int i;
+		
+
+
+		IloModel model(env);
+		IloNumVarArray Gridpowerbuy(env, totaltime, 0, IloInfinity);//Grid power bought
+		IloNumVarArray Gridpowersell(env, totaltime, 0, IloInfinity);//Grid power sold
+		IloNumVarArray Incentive(env, totaltime, 0, IloInfinity);
+
+		IloExpr solutio(env, totaltime);
+
+
+		for (i = 0; i < totaltime; i++)
+		{
+			solutio += Incentive[i] * electricdemand[i] - IloPower(Incentive[i],2) * (gridbuy[i] - gridsell[i]);
+
+		}
+		// Objective: minimize cost
+		model.add(IloMaximize(env, solutio));
+
+		// Constraint: meet demand
+		for (i = 0; i < totaltime; i++){
+
+		model.add(0 <= Incentive[i]);
+		model.add(Incentive[i] <= gridbuy[i] - gridsell[i]);
+
+		if (i > 9 && i < 20)
+		{
+			model.add(Incentive[i] >= 0);
+		}
+		else
+		{
+			model.add(Incentive[i] == 0);
+		}
+	}
+
+
+		IloCplex cplex(env);
+		cplex.extract(model);
+		cplex.exportModel("ModelLP.lp");
+
+		cplex.solve();
+
+		cout << "Solution status: " << cplex.getStatus() << endl;
+
+		cout << "Minimized Objective Funtion " << cplex.getObjValue() << endl;
+
+		cout << "DGA" << "   " << "CHPA" << "   " << "Grid" << "   " << "Grid power sell" << "   " << "PV" << "   " << "DEmand" << "   " << "SOC" << "   " << "charging" << "   " << "discharging" << endl;
+
+		for (i = 0; i < totaltime; i++)
+		{
+			cout << cplex.getValue(Incentive[i]) << endl;
+		}
+		IloNum eps = cplex.getParam(
+			IloCplex::Param::MIP::Tolerances::Integrality);
+	}
+	catch (IloException& ex) {
+		cerr << "Error: " << ex << endl;
+	}
+
+	env.end();
+	system("pause");
+	return 0;
+	}

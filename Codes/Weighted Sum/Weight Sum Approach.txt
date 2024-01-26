@@ -1,0 +1,217 @@
+#include <ilcplex/ilocplex.h>
+ILOSTLBEGIN
+typedef IloArray<IloNumVarArray>  IloNumVarArray2;
+
+int main(int, char**) {
+    IloEnv env;
+
+    try {
+        // Input data
+        int totaltime = 24;
+        float electricload1[24] = { 93,101,103,89,99,122,271,289,278,426,504,475,487,454,456,456,455,399,329,263,191,158,130,60 };
+        float buyprice[24] = { 100,90,90,90,90,90,110,110,110,110,110,125,125,125,125,125,125,125,110,110,110,110,110,110 };
+        float sellprice[24] = { 70,70,70,70,70,70,85,85,85,85,85,105,105,105,105,105,105,105,85,85,85,85,85,70 };
+        float newsellprice[24] = { 70,70,70,70,70,70,85,85,85,93.76,95.06,114.58,114.78,114.23,114.26,114.26,114.25,113.31,92.15,85,85,85,85,85 };
+        float rdg3[24] = { 0,0,0,0,0,0,0,60,65,70,73,78,83,85,84,81,78,60,0,0,0,0,0,0 };
+        int dgcost = 80;
+        int dg2cost = 100;
+        int i;
+        int p;
+
+        // EV inputs
+        const int numev = 5;
+        int evarr[numev] = { 7,8,9,9,11 };
+        int evpdep[numev] = { 15,18,21,21,23 };
+        float evsocini[numev] = { 0.8,0.2,0.8,0.7,0.3 };
+
+        //Battery inputs
+        float socini = 0.2;
+        int pbmax = 100;//battery maximum capacity
+        float effin = 0.95;//battery effciency
+
+       //weights for the objectives
+        float weight_cost = 0.7;
+        float weight_ev_profit = 0.3;
+
+        //Variables
+        IloModel model(env);
+        IloNumVarArray Pshort(env, totaltime, 0, IloInfinity); // Grid power bought
+        IloNumVarArray Psurplus(env, totaltime, 0, IloInfinity); // Grid power sold
+        IloNumVarArray statoc(env, totaltime, 0, 1);//battery storage capacity
+        IloNumVarArray besschg(env, totaltime, 0, 100);//battery charging
+        IloNumVarArray bessdis(env, totaltime, 0, 100);//battery discharging
+        IloNumVarArray dgpower(env, totaltime, 0, 100);
+        IloNumVarArray dg2power(env, totaltime, 0, 150);
+
+
+        //EV variables
+        IloNumVarArray2 BSOC(env);
+        for (p = 0; p < numev; p++)
+        {
+            BSOC.add(IloNumVarArray(env, totaltime, 0, 1));
+        }
+        IloNumVarArray2 Bchg(env);
+        for (p = 0; p < numev; p++)
+        {
+            Bchg.add(IloNumVarArray(env, totaltime, 0.0, IloInfinity));
+        }
+        IloNumVarArray2 Bdis(env);
+        for (p = 0; p < numev; p++)
+        {
+            Bdis.add(IloNumVarArray(env, totaltime, 0.0, IloInfinity));
+        }
+        IloExpr sumdischargeEV1(env);
+
+        for (i = 0; i < totaltime; i++) {
+            sumdischargeEV1 += Bdis[0][i];
+        }
+        IloExpr sumdischargeEV2(env);
+
+        for (i = 0; i < totaltime; i++) {
+            sumdischargeEV2 += Bdis[1][i];
+        }
+        IloExpr sumdischargeEV3(env);
+
+        for (i = 0; i < totaltime; i++) {
+            sumdischargeEV3 += Bdis[2][i];
+        }
+        IloExpr sumdischargeEV4(env);
+
+        for (i = 0; i < totaltime; i++) {
+            sumdischargeEV4 += Bdis[3][i];
+        }
+        IloExpr sumdischargeEV5(env);
+
+        for (i = 0; i < totaltime; i++) {
+            sumdischargeEV5 += Bdis[4][i];
+        }
+        IloArray<IloNumVarArray> Bact(env, 5);
+        for (int p = 0; p < 5; p++) {
+            Bact[p] = IloNumVarArray(env, 24, 0, 1, ILOBOOL);
+        }
+
+
+        IloExpr cost(env);
+        IloExpr ev_profit(env);
+        for (i = 0; i < totaltime; ++i) {
+            cost += buyprice[i] * Pshort[i] + newsellprice[i] * (Bdis[0][i] + Bdis[1][i] + Bdis[2][i] + Bdis[3][i] + Bdis[4][i]) -sellprice[i] * Psurplus[i] + dgcost * dgpower[i] + dg2cost * dg2power[i];
+            for (p = 0; p < numev; ++p) {
+                ev_profit += newsellprice[i] * Bdis[p][i];
+            }
+        }
+
+        model.add(IloMinimize(env, weight_cost * cost - weight_ev_profit * ev_profit));
+
+
+        //constraints
+
+
+
+
+
+        for (i = 0; i < totaltime; i++) {
+
+            model.add(0 <= dgpower[i]);
+            model.add(dgpower[i] >= 100);
+            model.add(0 <= dg2power[i]);
+            model.add(dg2power[i] >= 150);
+            model.add(0 <= statoc[i]);
+            model.add(statoc[i] <= 1);
+            model.add(sumdischargeEV1 <= pbmax);
+            model.add(sumdischargeEV2 <= pbmax);
+            model.add(sumdischargeEV3 <= pbmax);
+            model.add(sumdischargeEV4 <= pbmax);
+            model.add(sumdischargeEV5 <= pbmax);
+
+
+
+
+            double M = pbmax * effin;
+
+            if (i >= 0 && i <= 23)
+
+            {
+
+                for (p = 0; p < 5; p++)
+                {
+                    if (i == evarr[p])
+                    {
+                        model.add(BSOC[p][i] == evsocini[p] + ((effin * Bchg[p][i] - (Bdis[p][i] / effin)) / pbmax));
+                        model.add(0 <= Bchg[p][i]);
+                        model.add(0 <= Bdis[p][i]);
+                        model.add(Bchg[p][i] <= (pbmax * (1 - evsocini[p]) / effin));
+                        model.add(Bdis[p][i] <= (pbmax * evsocini[p] * effin));
+
+                    }
+                    else if (i > evarr[p] && i < evpdep[p])
+                    {
+                        model.add(BSOC[p][i] == BSOC[p][i - 1] + ((effin * Bchg[p][i] - (Bdis[p][i] / effin)) / pbmax));
+                        model.add(0 <= Bchg[p][i]);
+                        model.add(0 <= Bdis[p][i]);
+                        model.add(Bchg[p][i] <= (pbmax * (1 - BSOC[p][i - 1])) / effin);
+                        model.add(Bdis[p][i] <= pbmax * BSOC[p][i - 1] * effin);
+
+                    }
+                    else if (i == evpdep[p])
+                    {
+                        model.add(BSOC[p][i] == BSOC[p][i - 1] + ((effin * Bchg[p][i] - (Bdis[p][i] / effin)) / pbmax));
+                        model.add(0 <= Bchg[p][i]);
+                        model.add(0 <= Bdis[p][i]);
+                        model.add(Bchg[p][i] <= (pbmax * (1 - BSOC[p][i - 1])) / effin);
+                        model.add(Bdis[p][i] <= pbmax * BSOC[p][i - 1] * effin);
+                        model.add(BSOC[p][i] >= 0.5);
+
+
+                    }
+                    else
+                    {
+                        model.add(Bchg[p][i] == 0);
+                        model.add(Bdis[p][i] == 0);
+                    }
+                    model.add(0 <= BSOC[p][i]);
+                    model.add(BSOC[p][i] <= 1);
+                    model.add(Bchg[p][i] <= M * Bact[p][i]);
+                    model.add(Bdis[p][i] <= M * (1 - Bact[p][i]));
+                }
+            }
+
+            //Battery constraints
+            if (i == 0)
+            {
+                model.add(statoc[i] == socini + ((effin * besschg[i] - (bessdis[i] / effin)) / pbmax));
+                model.add(0 <= besschg[i]);
+                model.add(0 <= bessdis[i]);
+                model.add(besschg[i] <= (pbmax * (1 - socini) / effin));
+                model.add(bessdis[i] <= (pbmax * socini * effin));
+            }
+            else
+            {
+                model.add(statoc[i] == statoc[i - 1] + ((effin * besschg[i] - (bessdis[i] / effin)) / pbmax));
+                model.add(0 <= besschg[i]);
+                model.add(0 <= bessdis[i]);
+                model.add(besschg[i] <= (pbmax * (1 - statoc[i - 1])) / effin);
+                model.add(bessdis[i] <= pbmax * statoc[i - 1] * effin);
+            }
+            model.add(Pshort[i] + rdg3[i] + bessdis[i] + dgpower[i] + dg2power[i] + Bdis[0][i] + Bdis[1][i] + Bdis[2][i] + Bdis[3][i] + Bdis[4][i] == electricload1[i] + Psurplus[i] + besschg[i] + Bchg[0][i] + Bchg[1][i] + Bchg[2][i] + Bchg[3][i] + Bchg[4][i]);
+        }
+
+        // Solve the model
+        IloCplex cplex(env);
+        cplex.extract(model);
+        cplex.solve();
+        cout << "Solution status: " << cplex.getStatus() << endl;
+        cout << "Minimized Objective Function " << cplex.getObjValue() << endl;
+
+        for (i = 0; i < totaltime; i++)
+        {
+            cout <<cplex.getValue(statoc[i] * 100) << "\t" << cplex.getValue(besschg[i]) << "\t" << cplex.getValue(bessdis[i]) << "\t" <</*cplex.getValue(BSOC[0][i] * 100) << "\t" << cplex.getValue(Bchg[0][i]) << "\t" << cplex.getValue(Bdis[0][i]) << "\t" << cplex.getValue(BSOC[1][i] * 100) << "\t" << cplex.getValue(Bchg[1][i]) << "\t" << cplex.getValue(Bdis[1][i]) << "\t" << cplex.getValue(BSOC[2][i] * 100) << "\t" << cplex.getValue(Bchg[2][i]) << "\t" << cplex.getValue(Bdis[2][i]) << "\t" << cplex.getValue(BSOC[3][i] * 100) << "\t" << cplex.getValue(Bchg[3][i]) << "\t" << cplex.getValue(Bdis[3][i]) << "\t" << cplex.getValue(BSOC[4][i] * 100) << "\t" << cplex.getValue(Bchg[4][i]) << "\t" << cplex.getValue(Bdis[4][i]) << "\t" << cplex.getValue(Pshort[i]) << "\t\t" << cplex.getValue(Psurplus[i]) << "\t" << rdg3[i] << "\t" << cplex.getValue(dgpower[i]) << "\t" << cplex.getValue(dg2power[i]) << /* "\t" << electricload1[i] << "\t" << buyprice[i] << "\t" << sellprice[i] <<*/ endl;
+        }
+        IloNum eps = cplex.getParam(IloCplex::Param::MIP::Tolerances::Integrality);
+    }
+    catch (IloException& ex) {
+        cerr << "Error: " << ex << endl;
+    }
+    env.end();
+    system("pause");
+    return 0;
+}

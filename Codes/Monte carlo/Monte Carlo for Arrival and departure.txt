@@ -1,0 +1,62 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.stats import norm
+
+# Set the seed for reproducible results
+np.random.seed(25)
+
+# Parameters
+num_vehicles = 20
+num_simulations = 10000
+mean_arrival = 8.5
+std_dev_arrival = 3.3
+mean_departure = 17.5
+std_dev_departure = 3.24
+
+# Function to simulate arrival and departure times
+def simulate_arrival_and_departure_times(mean_arrival, std_dev_arrival, mean_departure, std_dev_departure, num_vehicles, num_simulations):
+    arrival_times = []
+    departure_times = []
+
+    for _ in range(num_simulations):
+        arrivals = np.clip(np.random.normal(mean_arrival, std_dev_arrival, num_vehicles), 0, 24)
+        departures = np.clip(np.random.normal(mean_departure, std_dev_departure, num_vehicles), 0, 24)
+
+        arrival_times.append(arrivals)
+        departure_times.append(departures)
+
+    return np.array(arrival_times), np.array(departure_times)
+
+# Run the simulation
+simulated_arrival_times, simulated_departure_times = simulate_arrival_and_departure_times(mean_arrival, std_dev_arrival, mean_departure, std_dev_departure, num_vehicles, num_simulations)
+
+# Plot the histogram of the generated data for arrival and departure times
+fig, axs = plt.subplots(nrows=1, ncols=1, figsize=(8, 6))
+bins = np.linspace(0, 24, 25)
+axs.hist(simulated_arrival_times.flatten(), bins=bins, density=True, alpha=0.7, label="Arrival Times")
+axs.hist(simulated_departure_times.flatten(), bins=bins, density=True, alpha=0.7, label="Departure Times")
+x = np.linspace(0, 24, 1000)
+pdf_arrival = norm.pdf(x, loc=mean_arrival, scale=std_dev_arrival)
+pdf_departure = norm.pdf(x, loc=mean_departure, scale=std_dev_departure)
+axs.plot(x, pdf_arrival,'-', color='r', label="Initial PDF - Arrival")
+axs.plot(x, pdf_departure, '-', color='g', label="Initial PDF - Departure")
+axs.set_xlabel("Time (hours)")
+axs.set_ylabel("Probability Density")
+axs.set_title("Histogram of Arrival and Departure Times")
+axs.legend()
+plt.show()
+
+# Select a random sample from the simulation results
+random_sample_idx = np.random.randint(0, num_simulations)
+
+# Print the results
+for vehicle_idx in range(num_vehicles):
+    print(f"Vehicle {vehicle_idx + 1}:")
+    print(f"  Arrival time: {simulated_arrival_times[random_sample_idx, vehicle_idx]:.0f} hours")
+    print(f"  Departure time: {simulated_departure_times[random_sample_idx, vehicle_idx]:.0f} hours\n")
+
+# Print the mean and standard deviation for each data set
+print(f"Mean arrival time: {mean_arrival:.2f} hours")
+print(f"Standard deviation of arrival time: {std_dev_arrival:.2f} hours")
+print(f"Mean departure time: {mean_departure:.2f} hours")
+print(f"Standard deviation of departure time: {std_dev_departure:.2f} hours")

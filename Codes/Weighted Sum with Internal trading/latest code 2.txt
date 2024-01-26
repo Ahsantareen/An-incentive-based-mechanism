@@ -1,0 +1,211 @@
+#include <ilcplex/ilocplex.h>
+ILOSTLBEGIN
+typedef IloArray<IloNumVarArray>  IloNumVarArray2;
+
+int main(int, char**) {
+    IloEnv env;
+
+    try {
+        // Input data
+        int totaltime = 24;
+        float demand[24] = { 93,101,103,89,99,122,271,289,278,426,504,475,487,454,456,456,455,399,329,263,191,158,130,60 }; //load of MG
+        float gridbuyprice[24] = { 139,136,137,136,134,138,146,151,156,159,161,163,164,163,162,161,161,160,159,161,158,156,151,149 }; //grid buy price
+        float gridsellprice[24] = { 119,116,118,117,115,118,126,131,137,139,141,143,144,143,142,141,141,140,139,141,138,136,131,129 }; //grid sell price
+        float mgbuyprice[24] = { 136, 132, 134, 134, 129, 135, 143, 149, 156, 149, 161, 162, 160, 156, 152, 151, 151, 157, 156, 158, 156, 153, 148, 147 }; //internal trading between EV and MG buy price
+        float mgsellprice[24] = { 120,119,119,117,118,119,133,134,137,146,142,144,146,146,148,147,147,143,144,142,140,138,133,131 };// internal trading between EV and MG sellprice
+        float evsellprice[24] = {119.00, 116.00, 118.00, 117.00, 115.00, 118.00, 126.00, 131.00, 137.00, 149.65, 153.60, 154.88, 156.18, 154.35, 153.40, 152.40, 152.38, 149.98, 147.23, 141.00, 138.00, 136.00, 131.00, 129.00}; // Trading from EV to grid sell price
+        float rdg[24] = { 0,0,0,0,0,0,0,60,65,70,73,78,83,85,84,81,78,60,0,0,0,0,0,0 };
+
+        int dgcost = 80;
+        int dg2cost = 100;
+        int i;
+        int p;
+
+        // EV inputs
+        const int numev = 20; //Number if EVs
+        float evarr[numev] = { 9,11,6,11,13,0,8,8,8,12,9,4,10,10,10,6,14,12,8,11 }; // Arrival time
+        float evpdep[numev] = { 17,17,23,17,18,19,21,13,17,22,23,19,12,21,16,18,17,18,20,16 }; // Depaerture time
+        float evsocini[numev] = { 0.52, 0.71, 0.60, 0.53, 0.78, 0.66, 0.33, 0.84, 0.48, 0.57, 0.49, 0.44, 0.51, 0.59, 0.72, 0.66, 0.72, 0.70, 0.74, 0.24 }; // Initial SOC of EVs
+        float evpbmax[numev] = { 54, 74, 28.9, 57.5, 74, 91, 28.5, 58, 45, 83.7, 39, 39.2, 78, 25, 50.8, 90.6, 85, 46.3, 74, 21.3 }; // Max capacity of EV battery
+        float M = 1000;
+
+        //Battery inputs
+        float socini = 0.2; // Battery initial SoC
+        int pbmax = 100;//battery maximum capacity
+        float effin = 0.95;//battery effciency
+
+       //weights for the objectives
+        float weight_cost = 0.5;
+        float weight_ev_profit = 0.5;
+
+        //Variables
+        IloModel model(env);
+        IloNumVarArray gridtomg(env, totaltime, 0, IloInfinity);
+        IloNumVarArray mgtogrid(env, totaltime, 0, IloInfinity);
+        IloNumVarArray statoc(env, totaltime, 0, 1);
+        IloNumVarArray besschg(env, totaltime, 0, 100);
+        IloNumVarArray bessdis(env, totaltime, 0, 100);
+        IloNumVarArray dgpower(env, totaltime, 0, 100);
+        IloNumVarArray dg2power(env, totaltime, 0, 150);
+
+        //Decision variables of EVs
+        IloNumVarArray2 BSOC(env);
+        for (p = 0; p < numev; p++)
+        {
+            BSOC.add(IloNumVarArray(env, totaltime, 0, 1));
+        }
+        IloNumVarArray2 Bchg(env);
+        for (p = 0; p < numev; p++)
+        {
+            Bchg.add(IloNumVarArray(env, totaltime, 0.0, IloInfinity));
+        }
+        IloNumVarArray2 Bdis(env);
+        for (p = 0; p < numev; p++)
+        {
+            Bdis.add(IloNumVarArray(env, totaltime, 0.0, IloInfinity));
+        }
+        IloNumVarArray2 z1(env);
+        for (p = 0; p < numev; p++)
+        {
+            z1.add(IloNumVarArray(env, totaltime, 0, 1, ILOBOOL));
+        }
+        IloNumVarArray2 z2(env);
+        for (p = 0; p < numev; p++)
+        {
+            z2.add(IloNumVarArray(env, totaltime, 0, 1, ILOBOOL));
+        }
+        IloNumVarArray2 mgtoev(env);
+        for (p = 0; p < numev; p++)
+        {
+            mgtoev.add(IloNumVarArray(env, totaltime, 0.0, IloInfinity));
+        }
+        IloNumVarArray2 evtomg(env);
+        for (p = 0; p < numev; p++)
+        {
+            evtomg.add(IloNumVarArray(env, totaltime, 0.0, IloInfinity));
+        }
+        IloNumVarArray2 evtogrid(env);
+        for (p = 0; p < numev; p++)
+        {
+            evtogrid.add(IloNumVarArray(env, totaltime, 0.0, IloInfinity));
+        }
+        IloNumVarArray2 gridtoev(env);
+        for (p = 0; p < numev; p++)
+        {
+            gridtoev.add(IloNumVarArray(env, totaltime, 0.0, IloInfinity));
+        }
+
+
+        IloExpr cost(env);
+        IloExpr ev_profit(env);
+        for (i = 0; i < totaltime; ++i)
+        {
+            for (p = 0; p < numev; ++p) {
+                cost += gridbuyprice[i] * gridtomg[i] + dgcost * dgpower[i] + dg2cost * dg2power[i] - gridsellprice[i] * mgtogrid[i] + mgbuyprice[i] * evtomg[p][i] - mgsellprice[i] * mgtoev[p][i];
+                ev_profit += mgbuyprice[i] * mgtoev[p][i] - mgsellprice[i] * evtomg[p][i] + gridbuyprice[i] * gridtoev[p][i] - evsellprice[i] * evtogrid[p][i];
+            }
+        }
+
+        model.add(IloMinimize(env, weight_cost * cost + weight_ev_profit * ev_profit));
+
+        //constraints
+        for (i = 0; i < totaltime; i++) {
+
+            // DG constraints
+            model.add(0 <= dgpower[i]);
+            model.add(dgpower[i] <= 100);
+            model.add(0 <= dg2power[i]);
+            model.add(dg2power[i] <= 150);
+            model.add(0 <= statoc[i]);
+            model.add(statoc[i] <= 1);
+
+            for (p = 0; p < 20; p++)
+            {
+                //EV constraints
+                if (i == evarr[p])
+                {
+                    model.add(BSOC[p][i] == evsocini[p] + ((effin * Bchg[p][i] - (Bdis[p][i] / effin)) / evpbmax[p]));
+                    model.add(0 <= Bchg[p][i]);
+                    model.add(0 <= Bdis[p][i]);
+                    model.add(Bchg[p][i] <= (evpbmax[p] * (1 - evsocini[p]) / effin));
+                    model.add(Bdis[p][i] <= (evpbmax[p] * evsocini[p] * effin));
+
+                }
+                else if (i > evarr[p] && i < evpdep[p])
+                {
+                    model.add(BSOC[p][i] == BSOC[p][i - 1] + ((effin * Bchg[p][i] - (Bdis[p][i] / effin)) / evpbmax[p]));
+                    model.add(0 <= Bchg[p][i]);
+                    model.add(0 <= Bdis[p][i]);
+                    model.add(Bchg[p][i] <= (evpbmax[p] * (1 - BSOC[p][i - 1])) / effin);
+                    model.add(Bdis[p][i] <= evpbmax[p] * BSOC[p][i - 1] * effin);
+                }
+                else if (i == evpdep[p])
+                {
+                    model.add(BSOC[p][i] == BSOC[p][i - 1] + ((effin * Bchg[p][i] - (Bdis[p][i] / effin)) / evpbmax[p]));
+                    model.add(0 <= Bchg[p][i]);
+                    model.add(0 <= Bdis[p][i]);
+                    model.add(Bchg[p][i] <= (evpbmax[p] * (1 - BSOC[p][i - 1])) / effin);
+                    model.add(Bdis[p][i] <= evpbmax[p] * BSOC[p][i - 1] * effin);
+                    model.add(BSOC[p][i] >= 0.5);
+                }
+                else
+                {
+                    model.add(Bchg[p][i] == 0);
+                    model.add(Bdis[p][i] == 0);
+                }
+
+                if (i == 0)
+                {
+                    model.add(statoc[i] == socini + ((effin * besschg[i] - (bessdis[i] / effin)) / pbmax));
+                    model.add(0 <= besschg[i]);
+                    model.add(0 <= bessdis[i]);
+                    model.add(besschg[i] <= (pbmax * (1 - socini) / effin));
+                    model.add(bessdis[i] <= (pbmax * socini * effin));
+                }
+                else
+                {
+                    model.add(statoc[i] == statoc[i - 1] + ((effin * besschg[i] - (bessdis[i] / effin)) / pbmax));
+                    model.add(0 <= besschg[i]);
+                    model.add(0 <= bessdis[i]);
+                    model.add(besschg[i] <= (pbmax * (1 - statoc[i - 1])) / effin);
+                    model.add(bessdis[i] <= pbmax * statoc[i - 1] * effin);
+                }
+                model.add(0 <= BSOC[p][i]);
+                model.add(BSOC[p][i] <= 1);
+                model.add(gridtoev[p][i] <= M * z1[p][i]); // If z1[i] == 1, EV can receive power from the grid
+                model.add(evtomg[p][i] <= M * (1 - z1[p][i])); // If z1[i] == 0, EV can receive power from MG
+                model.add(mgtoev[p][i] <= M * z2[p][i]); // If z3[i] == 1, MG can receive power from EV
+                model.add(gridtomg[i] <= M * (1 - z2[p][i])); // If z3[i] == 0, MG can receive power from the grid
+
+                //Power Balance
+                model.add(gridtoev[p][i] + mgtoev[p][i] == Bchg[p][i]);
+                model.add(evtogrid[p][i] + evtomg[p][i] == Bdis[p][i]);
+                model.add(gridtomg[i] + evtomg[p][i] + rdg[i] + bessdis[i] + dgpower[i] + dg2power[i] == demand[i] + mgtogrid[i] + mgtoev[p][i] + besschg[i]);
+            }
+        }
+
+        // Solve the model
+        IloCplex cplex(env);
+        cplex.extract(model);
+        cplex.solve();
+        cout << "Solution status: " << cplex.getStatus() << endl;
+        cout << "Minimized Objective Function " << cplex.getObjValue() << endl;
+        cout << "SOC" << "\t" << "MG->EV" << "\t" << "grid->EV " << "\t" << "EV->grid " << "\t" << "EV->MG" << "\t" << "grid->mg" << "\t" << "MG->grid" << "\n" << endl;
+        for (int p = 0; p < numev; p++) {
+            std::cout << "EV " << p + 1 << ":" << std::endl;
+            for (int i = 0; i < totaltime; i++) {
+
+                std::cout << cplex.getValue(BSOC[p][i] * 100) << "\t" << cplex.getValue(mgtoev[p][i]) << "\t" << cplex.getValue(gridtoev[p][i]) << "\t" << cplex.getValue(evtogrid[p][i]) << "\t" << cplex.getValue(evtomg[p][i]) << "\t" << cplex.getValue(gridtomg[i]) << "\t" << cplex.getValue(mgtogrid[i]) << std::endl;
+            }
+            std::cout << std::endl;
+        }
+        IloNum eps = cplex.getParam(IloCplex::Param::MIP::Tolerances::Integrality);
+    }
+    catch (IloException& ex) {
+        cerr << "Error: " << ex << endl;
+    }
+
+    env.end();
+    system("pause");
+    return 0;
+}
